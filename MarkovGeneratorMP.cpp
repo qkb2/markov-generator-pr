@@ -1,8 +1,8 @@
-#include "MarkovGenerator.h"
+#include "MarkovGeneratorMP.h"
 
-MarkovGenerator::MarkovGenerator(int max_ngram_len, std::string& path) : Generator(max_ngram_len, path) {}
+MarkovGeneratorMP::MarkovGeneratorMP(int max_ngram_len, std::string& path) : Generator(max_ngram_len, path) {}
 
-std::vector<std::vector<std::string>> MarkovGenerator::get_word_ngrams(std::string& data)
+std::vector<std::vector<std::string>> MarkovGeneratorMP::get_word_ngrams(std::string& data)
 {
     std::vector<std::vector<std::string>> ngrams;
     std::istringstream iss(data);
@@ -10,19 +10,22 @@ std::vector<std::vector<std::string>> MarkovGenerator::get_word_ngrams(std::stri
     std::vector<std::string> words;
     while (iss >> word) {
         words.push_back(word);
-        if (words.size() >= max_ngram_len) {
-            std::vector<std::string> words_to_add;
-            for (int i = (int) words.size()-max_ngram_len; i < words.size(); i++)
-            {
-                words_to_add.push_back(words[i]);
-            }
-            ngrams.push_back(words_to_add);
-        }
     }
+
+#pragma omp parallel for
+    for (int j = 0; j < (int)words.size() - max_ngram_len + 1; j++) {
+        std::vector<std::string> words_to_add;
+        for (int i = j; i < j + max_ngram_len; i++) {
+            words_to_add.push_back(words[i]);
+        }
+#pragma omp critical
+        ngrams.push_back(words_to_add);
+    }
+
     return ngrams;
 }
 
-void MarkovGenerator::generate_ngram_markov()
+void MarkovGeneratorMP::generate_ngram_markov()
 {
     std::ifstream file(path);
     if (!file) {
@@ -43,6 +46,8 @@ void MarkovGenerator::generate_ngram_markov()
         }
     }
     auto ngrams = this->get_word_ngrams(data);
+
+#pragma omp parallel for
     for (int i = 0; i < ngrams.size(); i++)
     {
         const auto& ngram = ngrams[i];
@@ -52,12 +57,13 @@ void MarkovGenerator::generate_ngram_markov()
             context = context + " " + ngram[j];
         }
         std::string word_to_pred = ngram[ngram.size() - 1];
+#pragma omp critical
         word_counts_for_context[context][word_to_pred]++;
     }
     file.close();
 }
 
-std::string MarkovGenerator::generate_word_chain(std::string starter, int words_to_gen)
+std::string MarkovGeneratorMP::generate_word_chain(std::string starter, int words_to_gen)
 {
     std::string text = starter;
     std::string current_word = starter;
@@ -79,13 +85,13 @@ std::string MarkovGenerator::generate_word_chain(std::string starter, int words_
                     }
                 }
                 // Randomly select the next word from candidates
-                std::uniform_int_distribution<> dis(0, (int) candidates.size() - 1);
+                std::uniform_int_distribution<> dis(0, (int)candidates.size() - 1);
                 int random_index = dis(gen);
                 std::string next_word = candidates[random_index];
 
                 text += " " + next_word;
                 current_word = current_word.substr(current_word.find(' ') + 1) + " " + next_word;
-                
+
             }
             else {
                 // If there are no next words, break the loop

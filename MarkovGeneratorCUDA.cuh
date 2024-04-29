@@ -11,14 +11,17 @@
 #include <fstream>
 #include <sstream>
 
+#include <omp.h>
+#include <cuda.h>
+
 #include "Generator.h"
 
-class MarkovGenerator : public Generator
+class MarkovGeneratorCUDA : public Generator
 {
 public:
 	std::vector<std::vector<std::string>> get_word_ngrams(std::string& data);
-	MarkovGenerator(int max_ngram_len, std::string& path);
-	virtual ~MarkovGenerator() {}
+	MarkovGeneratorCUDA(int max_ngram_len, std::string& path);
+	virtual ~MarkovGeneratorCUDA() {}
 	void generate_ngram_markov();
 	std::string generate_word_chain(std::string starter, int words_to_gen);
 
